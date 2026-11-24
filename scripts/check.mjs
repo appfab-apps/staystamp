@@ -5,6 +5,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const VOID = new Set(['meta', 'link', 'br', 'img', 'hr', 'input', 'source']);
+// The only contact address that may appear on the pages.
+const EMAIL = 'appfab.apps@outlook.com';
 const errors = [];
 const pages = readdirSync('.').filter((f) => f.endsWith('.html'));
 const ids = new Map();
@@ -42,13 +44,15 @@ for (const page of pages) {
     if (src && /^(https?:)?\/\//.test(src)) fail(page, `loads ${src} from another site`);
     if (src && !/^(https?:)?\/\//.test(src) && !existsSync(src)) fail(page, `missing file ${src}`);
   }
-  if (/mailto:|[\w.+-]+@[\w-]+\.\w+/.test(html)) fail(page, 'contains an e-mail address');
+  for (const [address] of html.matchAll(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g)) {
+    if (address !== EMAIL) fail(page, 'contains an e-mail address other than the support address');
+  }
 }
 
 for (const page of pages) {
   const html = readFileSync(page, 'utf8');
   for (const [, href] of html.matchAll(/<a\s[^>]*href="([^"]+)"/g)) {
-    if (/^https:\/\//.test(href)) continue;
+    if (/^https:\/\//.test(href) || href === `mailto:${EMAIL}`) continue;
     if (/^\w+:|^\//.test(href)) {
       fail(page, `unexpected link ${href}`);
       continue;
@@ -66,6 +70,7 @@ for (const [, url] of css.matchAll(/url\("([^"]+)"\)/g)) {
   else if (!existsSync(url)) errors.push(`style.css: missing file ${url}`);
 }
 if (/@import/.test(css)) errors.push('style.css: @import is not allowed');
+if (!readFileSync('support.html', 'utf8').includes(`mailto:${EMAIL}`)) errors.push('support.html: the support address is missing');
 for (const required of ['index.html', 'privacy.html', 'support.html']) if (!pages.includes(required)) errors.push(`missing ${required}`);
 
 if (errors.length) {
